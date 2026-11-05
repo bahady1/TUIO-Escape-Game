@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "com.interactive-scape.tuio_client": "https://github.com/InteractiveScapeGmbH/TuioUnityClient.git",
     "com.unity.ai.assistant": "2.21.0-pre.2",
     "com.unity.ai.inference": "2.6.1",
     "com.unity.ai.navigation": "2.0.15",

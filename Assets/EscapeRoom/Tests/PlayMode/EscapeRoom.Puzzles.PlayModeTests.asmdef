@@ -1,0 +1,6 @@
+{
+  "name": "EscapeRoom.Puzzles.PlayModeTests",
+  "references": [],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "autoReferenced": false
+}

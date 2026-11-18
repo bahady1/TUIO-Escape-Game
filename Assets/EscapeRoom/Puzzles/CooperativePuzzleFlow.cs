@@ -24,8 +24,12 @@ namespace EscapeRoom
         public Image padAImage, padBImage, progress;
         public UnityEvent onAllPuzzlesSolved = new UnityEvent();
         public bool manageDemoSession;
+        [Tooltip("When set, Puzzles 2/3 are played on consoles and clue posters inside the rooms instead of the full-screen overlay.")]
+        public RoomPuzzleStations roomStations;
         public int ActivePuzzle { get; private set; }
         public string Entry => typed;
+        public bool AllSolved => victoryPanel != null && victoryPanel.activeSelf;
+        bool RoomMode => roomStations != null && roomStations.isActiveAndEnabled;
         readonly List<Canvas> hiddenCanvases = new List<Canvas>();
         readonly List<WallViewController> lockedViews = new List<WallViewController>();
         PuzzleControl[] controls;
@@ -42,7 +46,7 @@ namespace EscapeRoom
 
         void Start()
         {
-            controls = GetComponentsInChildren<PuzzleControl>(true);
+            controls = RoomMode ? new List<PuzzleControl>(roomStations.Controls).ToArray() : GetComponentsInChildren<PuzzleControl>(true);
             input.Tapped += OnInputTap;
             input.TokenRotated += OnTokenRotated;
             blackout.OnSolved += OnBlackoutSolved;
@@ -103,12 +107,14 @@ namespace EscapeRoom
 
         public void StartBlackout()
         {
-            SuspendRoom(); ghost.DeactivatePuzzle(); blackout.ActivatePuzzle();
+            if (!RoomMode) SuspendRoom();
+            ghost.DeactivatePuzzle(); blackout.ActivatePuzzle();
             ActivePuzzle = 2; BeginStage();
         }
         public void StartGhost()
         {
-            SuspendRoom(); blackout.DeactivatePuzzle(); ghost.ActivatePuzzle();
+            if (!RoomMode) SuspendRoom();
+            blackout.DeactivatePuzzle(); ghost.ActivatePuzzle();
             ActivePuzzle = 3; BeginStage();
         }
         void BeginStage()
@@ -120,10 +126,11 @@ namespace EscapeRoom
             completedHud = false;
             typed = ""; hintIndex = 0; decoderAngle = 0; lastPacket = lastRelay = "";
             input.ClearLocalConfirmations();
-            screen.SetActive(true); blackoutPanel.SetActive(ActivePuzzle == 2); ghostPanel.SetActive(ActivePuzzle == 3); victoryPanel.SetActive(false);
+            screen.SetActive(!RoomMode); blackoutPanel.SetActive(ActivePuzzle == 2); ghostPanel.SetActive(ActivePuzzle == 3); victoryPanel.SetActive(false);
             clueA2.SetActive(false); clueB2.SetActive(false); clueA3.SetActive(false); clueB3.SetActive(false);
             hintLabel.text = "Talk to your partner. Reveal only your own role's evidence.";
             Refresh();
+            if (RoomMode) roomStations.OnStageChanged();
         }
         void OnBlackoutSolved()
         {
@@ -139,7 +146,9 @@ namespace EscapeRoom
             {
                 GameHUD.Instance.Win("VAULT AUTHORISED - YOU ESCAPED!"); completedHud = true;
             }
-            input.ClearLocalConfirmations(); onAllPuzzlesSolved.Invoke();
+            input.ClearLocalConfirmations();
+            if (RoomMode) roomStations.OnStageChanged();
+            onAllPuzzlesSolved.Invoke();
         }
 
         void Update()
@@ -159,19 +168,31 @@ namespace EscapeRoom
             // The same OS/TUIO press may finish Puzzle 1 before this adapter sees it.
             // Never let that transition press also operate the newly opened panel.
             if (Time.frameCount <= stageStartedFrame) return;
+            // In the rooms, taps come from the room's TangibleInput (TUIO touches + mouse clicks) via HandleRoomTap.
+            if (RoomMode) return;
+            HandleTap(position);
+        }
+
+        /// <summary>In-room mode: a tap/click on the table (from TangibleInput).</summary>
+        public void HandleRoomTap(Vector2 position)
+        {
+            if (Time.frameCount <= stageStartedFrame) return;
             HandleTap(position);
         }
 
         public void HandleTap(Vector2 position)
         {
-            if (ActivePuzzle == 0 || controls == null) return;
+            if (controls == null || (ActivePuzzle == 0 && !RoomMode)) return;
             // Last-created controls are visually on top (e.g. private evidence overlays).
             for (int i = controls.Length - 1; i >= 0; --i)
                 if (controls[i].Contains(position)) { Execute(controls[i].action, controls[i].value); return; }
+            // In the rooms: a tap on a console or clue poster opens it over that half of the table.
+            if (RoomMode) roomStations.HandleWorldTap(position);
         }
 
         public void Execute(string action, string value)
         {
+            if (RoomMode && roomStations.HandleUiAction(action, value)) return;
             if (victoryPanel.activeSelf && action != "demo2" && action != "demo3" && action != "mode" && action != "reset") return;
             bool local = input.mode == PuzzleInputMode.LocalMouse;
             switch (action)
@@ -213,6 +234,7 @@ namespace EscapeRoom
                 ? new[] { "Colours are not the rule. Discuss the four binary digits on each relay.", "Exactly two 1s is a counting instruction, not a decimal conversion.", "Write each row as four bits; XOR equal bits to 0 and different bits to 1." }
                 : new[] { "Enumerate every directed route from S to V and add each link's cost.", "Reject routes using D, then compare remaining routes with the 10 ms limit.", "Use the route latency mod 5; move each letter of STIR backward in the alphabet." };
             hintLabel.text = hints[Mathf.Min(hintIndex++, hints.Length - 1)];
+            if (RoomMode && GameHUD.Instance != null) GameHUD.Instance.ShowHint(hintLabel.text);
         }
         void Refresh()
         {

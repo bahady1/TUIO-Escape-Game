@@ -34,6 +34,33 @@ The original 15-minute HUD timer is paused during these hard-mode stages. This i
 
 Do **not** use the older **Build Escape Room Scene** menu for this work: that existing builder regenerates the entire scene. The new **Install or validate** menu is additive and does not rebuild an existing cooperative root/prefab. It checkpoints the main scene before the first install and validates required references. Existing prefab/layout edits are preserved on later calls.
 
+## In-room mode (puzzles and clues inside the rooms)
+
+Run **Escape Room > Puzzles 2 + 3 > Place puzzles + clues in the rooms** once (Unity open, not in Play mode). It saves
+`EscapeRoom.unity` with a new root **Puzzles 2 + 3 (in rooms)** and switches the existing flow to in-room mode.
+Nothing else in the scene is rebuilt; running it again only replaces its own objects.
+**Remove room puzzles (back to full-screen overlay)** undoes it.
+
+| Object | Room / wall | Player |
+|---|---|---|
+| Console A (relays, then packet router) | Lab, East wall (divider), right of the door | A, left half |
+| Console B (checksum, then decoder + passphrase) | Server Room, West wall (divider), left of the door | B, right half |
+| Incident Log A-17 (Puzzle 2) | Lab, South wall, on the whiteboard | A |
+| Network Telemetry (Puzzle 3) | Lab, North wall, above the 3D printer | A |
+| Maintenance Revision 04 (Puzzle 2) | Server Room, North wall, left of the desk | B |
+| Security Directive (Puzzle 3) | Server Room, North wall, right of the desk | B |
+
+Play: finish the intro and Puzzle 1 as before. The consoles switch from *OFFLINE* to *TAP TO OPEN*.
+**Zoom with the ring** (tangible 4 or 7, like the Puzzle 1 switchbox): rest it on a console or poster in a room view
+for 1 s (the circle fills) and it zooms in over that half of the table; no turning. Tap **CLOSE** to leave; move the
+ring off the object before it can open it again. The ring may be lifted while zoomed in. Inside a console, **tap the screen** (TUIO touch or
+mouse click) to switch relays, pick route nodes and type the solution. Keyboard simulation: **R** puts ring 4 at the
+mouse (it follows the mouse, R again removes it). `Tap To Open` on *RoomPuzzleStations*
+re-enables opening with a plain tap. Each console has its own **AUTHORISE** pad and **HINT** button. Solving Puzzle 2 opens the door between the
+rooms and brings both consoles to Puzzle 3; solving Puzzle 3 shows *YOU ESCAPED* in the bottom bar. In this mode the
+15-minute HUD timer keeps running (raise *Game HUD > Time Limit Minutes* if needed). The standalone demo scene keeps
+the full-screen layout.
+
 ## Connect the laboratory TUX table
 
 The current saved project configuration is **TUIO 1.1 / WebSocket / 10.0.0.20**. The installed SDK selects WebSocket port **3333** for TUIO 1.1 (3343 for TUIO 2.0); its UDP Port field applies to UDP. These are inspected project values, **not verified live lab settings**. No network endpoint was changed.

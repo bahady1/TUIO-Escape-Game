@@ -96,9 +96,44 @@ namespace EscapeRoom.Tests
             yield return null;
             Assert.That(Property<bool>(puzzle1, "Solved"), Is.True);
             Assert.That(Property<int>(flow, "ActivePuzzle"), Is.EqualTo(2));
-            Assert.That(Field<GameObject>(flow, "screen").activeSelf, Is.True);
-            Assert.That(Field<GameObject>(flow, "blackoutPanel").activeSelf, Is.True);
-            Assert.That(legacy.gameObject.activeSelf, Is.False, "Cooperative flow must deactivate the old input owner.");
+            // In-room mode (Escape Room > Puzzles 2 + 3 > Place puzzles + clues in the rooms):
+            // the rooms stay playable and the puzzles run on the consoles next to the door.
+            var stations = Find("EscapeRoom.RoomPuzzleStations");
+            bool roomMode = stations != null && ((Behaviour)stations).isActiveAndEnabled;
+            if (roomMode)
+            {
+                Assert.That(Field<GameObject>(flow, "screen").activeSelf, Is.False, "In-room mode must not cover the rooms.");
+                Assert.That(legacy.gameObject.activeSelf, Is.True, "Room navigation stays available in in-room mode.");
+                Assert.That(Object.FindObjectsByType(TypeOf("EscapeRoom.RoomInteractable"), FindObjectsSortMode.None).Length, Is.EqualTo(6),
+                    "Two consoles and four clue posters are expected in the rooms.");
+                Assert.That((bool)Call(stations, "OpenConsole", 1), Is.True);
+                Assert.That((bool)Call(stations, "OpenConsole", 2), Is.True);
+
+                // Ring zoom: rest the ring (id 7; id 4 is the mouse-following simulated ring) on Console A
+                // for 1 s -> zoomed in. After CLOSE it must not reopen until the ring leaves the console.
+                Call(stations, "Close", 1); Call(stations, "Close", 2);
+                Call(Find("EscapeRoom.GameHUD"), "BeginGame");
+                var labView = Field<Component>(stations, "labView");
+                Call(labView, "ShowWall", 1);
+                yield return WaitForGameSeconds(1.5f);
+                var consoleA = Object.FindObjectsByType(TypeOf("EscapeRoom.RoomInteractable"), FindObjectsSortMode.None)
+                    .Cast<Component>().First(c => c.name.StartsWith("Lab Console A"));
+                var labCamera = Field<Camera>(labView, "viewCamera");
+                Vector2 ringAt = labCamera.WorldToScreenPoint(consoleA.GetComponentInChildren<Collider>().bounds.center);
+                Call(legacy, "SimulatePlace", 7, ringAt);
+                yield return WaitForGameSeconds(1.3f);
+                Assert.That((bool)Call(stations, "IsConsoleOpen", 1), Is.True, "Ring resting 1 s on Console A must open it.");
+                Call(stations, "Close", 1);
+                yield return WaitForGameSeconds(1.3f);
+                Assert.That((bool)Call(stations, "IsConsoleOpen", 1), Is.False, "After CLOSE the resting ring must not reopen it.");
+                Call(legacy, "SimulateRemove", 7);
+            }
+            else
+            {
+                Assert.That(Field<GameObject>(flow, "screen").activeSelf, Is.True);
+                Assert.That(Field<GameObject>(flow, "blackoutPanel").activeSelf, Is.True);
+                Assert.That(legacy.gameObject.activeSelf, Is.False, "Cooperative flow must deactivate the old input owner.");
+            }
             Assert.That(session.gameObject.activeSelf, Is.False, "The test must never connect the laboratory session.");
             Assert.That(Field<GameObject>(flow, "legacyBlackoutCanvas").activeSelf, Is.False);
             Assert.That(Field<int[]>(puzzle1, "solution"), Is.EqualTo(new[] { 1, 0, 1, 0, 2, 0, 1, 2 }));
@@ -113,6 +148,8 @@ namespace EscapeRoom.Tests
                 "Progress=" + Property<float>(Field<Component>(flow, "blackout"), "ConfirmationProgress") +
                 "; A=" + Call(Field<Component>(flow, "input"), "GetLocalConfirmation", 1) +
                 "; B=" + Call(Field<Component>(flow, "input"), "GetLocalConfirmation", 2));
+            if (roomMode)
+                Assert.That(Property<bool>(Field<Component>(stations, "door"), "IsOpen"), Is.True, "Solving Puzzle 2 opens the door between the rooms.");
             foreach (string node in new[] { "S", "B", "E", "V" }) Call(flow, "Execute", "node", node);
             Call(flow, "Execute", "validate", ""); Call(flow, "Execute", "shift", "4");
             foreach (char letter in "OPEN") Call(flow, "Execute", "key", letter.ToString());
@@ -125,7 +162,7 @@ namespace EscapeRoom.Tests
             Assert.That(Property<bool>(door, "IsOpen"), Is.True);
             Assert.That(Property<bool>(hud, "IsFinished"), Is.True);
             Call(flow, "Execute", "demo3", "");
-            Assert.That(Property<bool>(door, "IsOpen"), Is.False, "Replay closes the door opened by this flow.");
+            if (!roomMode) Assert.That(Property<bool>(door, "IsOpen"), Is.False, "Replay closes the door opened by this flow.");
             Assert.That(Property<bool>(hud, "IsFinished"), Is.False, "Replay clears this flow's old HUD victory.");
             Assert.That(Property<bool>(hud, "IsRunning"), Is.False, "Hard-mode demo remains untimed.");
             Assert.That(Field<int[]>(puzzle1, "solution"), Is.EqualTo(new[] { 1, 0, 1, 0, 2, 0, 1, 2 }));

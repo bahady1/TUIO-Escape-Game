@@ -127,7 +127,7 @@ namespace EscapeRoom.EditorTools
             {
                 "The switchbox in the server room controls the power. The lab has the clue.",
                 "Look closely at the old circuit poster in the lab.",
-                "Put the ring on the switchbox for 2 seconds, then turn it 90 degrees.",
+                "Put the ring on the switchbox for 1 second, then turn it 90 degrees.",
                 "Each knob can be up, middle or down. Tap a knob to move it.",
                 "Turn the ring back 90 degrees to step away from the switchbox.",
             };
@@ -151,6 +151,15 @@ namespace EscapeRoom.EditorTools
             puzzle.panelSprite = _panelSprite;
             puzzle.knobSprites = _slotKnobSprites;
             puzzle.ringIds = new[] { 4, 7 };
+            puzzle.placeSeconds = 1f;
+            puzzle.showHotspotCircle = false;
+
+            var musicGo = new GameObject("Background Music");
+            musicGo.transform.SetParent(systems, false);
+            musicGo.AddComponent<AudioSource>();
+            var music = musicGo.AddComponent<BackgroundMusic>();
+            music.clip = AssetDatabase.LoadAssetAtPath<AudioClip>(Root + "/Audio/EscapeRoomLoop.wav");
+            if (music.clip == null) Debug.LogWarning("[EscapeRoom] Missing " + Root + "/Audio/EscapeRoomLoop.wav");
 
             var introGo = new GameObject("Intro Dialogue");
             introGo.transform.SetParent(systems, false);

@@ -265,7 +265,9 @@ namespace EscapeRoom
             if (left) Simulate(rightSimulatedId, -simulatedKeyStep);
             if (Mathf.Abs(scroll) > 0.01f)
             {
-                int id = mousePos.x < Screen.width * 0.5f ? leftSimulatedId : rightSimulatedId;
+                // While the simulated ring is placed, the wheel turns the ring; otherwise the room under the mouse.
+                int id = _simulated.ContainsKey(ringSimulatedId) ? ringSimulatedId
+                    : mousePos.x < Screen.width * 0.5f ? leftSimulatedId : rightSimulatedId;
                 Simulate(id, -Mathf.Sign(scroll) * simulatedWheelStep);
             }
 

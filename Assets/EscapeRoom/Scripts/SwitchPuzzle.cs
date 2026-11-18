@@ -9,10 +9,11 @@ namespace EscapeRoom
     /// Puzzle 1 - the switchbox in the server room.
     ///
     /// 1. Face the switchbox wall in the server room. Put the ring (tangible 4 or 7) on the switchbox
-    ///    for 'placeSeconds' (2 s), then turn it ~90 degrees -> the switchbox zooms in.
+    ///    for 'placeSeconds' (1 s), then turn it: the zoom follows the ring and is complete at ~90 degrees.
+    ///    Turning only part of the way zooms part of the way; turning back or lifting the ring early lets it fall back.
     /// 2. Tap a knob to move it: middle -> down -> up -> middle ...  (states: 0 up, 1 middle, 2 down)
     /// 3. Matching 'solution' restores the power (lights on).
-    /// 4. Turn the ring back ~90 degrees to step away. The ring may be lifted off while zoomed in.
+    /// 4. Turn the ring back to step away (the zoom shrinks with the ring). The ring may be lifted off while zoomed in.
     /// </summary>
     public class SwitchPuzzle : MonoBehaviour
     {
@@ -33,9 +34,14 @@ namespace EscapeRoom
 
         [Header("Ring tangible")]
         public int[] ringIds = { 4, 7 };
-        public float placeSeconds = 2f;
-        [Tooltip("How far the ring has to be turned (a little under 90 so it is not fiddly).")]
+        public float placeSeconds = 1f;
+        [Tooltip("Draw the circle over the switchbox. Off = players have to find the switchbox themselves.")]
+        public bool showHotspotCircle = false;
+        [Tooltip("Ring turn for a full zoom. The zoom follows the ring: half the turn = half zoomed. " +
+                 "A little under 90 so it is not fiddly.")]
         public float turnDegrees = 80f;
+        [Tooltip("How quickly the zoom catches up with the ring.")]
+        public float zoomFollowSpeed = 14f;
         [Tooltip("Extra room around the switchbox on screen where the ring still counts (pixels).")]
         public float hotspotMarginPx = 90f;
 
@@ -79,8 +85,8 @@ namespace EscapeRoom
         float _scale;
 
         // Ring state
-        float _dwell, _grace, _enterAccum, _exitAccum;
-        bool _armed, _animating;
+        float _dwell, _grace, _enterAccum, _exitAccum, _zoom;
+        bool _armed;
         int _entryDir = 1;
         TangibleInput _input;
 
@@ -120,9 +126,12 @@ namespace EscapeRoom
         void Update()
         {
             UpdateKnobVisuals();
+            UpdateZoomVisual();
+            // Keep the server room view still while the ring is zooming in or the switchbox is open.
+            if (room != null) room.inputLocked = Zoomed || _zoom > 0.001f || (_armed && _enterAccum != 0f);
 
             bool started = GameHUD.Instance == null || GameHUD.Instance.GameStarted;
-            if (!started || room == null || Zoomed || _animating || !TryGetHotspot(out var spot))
+            if (!started || room == null || Zoomed || !TryGetHotspot(out var spot))
             {
                 if (!Zoomed) Disarm();
                 _hotspot.gameObject.SetActive(false);
@@ -159,6 +168,8 @@ namespace EscapeRoom
             _hotspotFill.fillAmount = _armed ? 1f : Mathf.Clamp01(_dwell / placeSeconds);
             _hotspotFill.color = _armed ? accentColor : new Color(accentColor.r, accentColor.g, accentColor.b, 0.85f);
             _hotspotRing.color = new Color(1f, 1f, 1f, ringHere || _armed ? 0.8f : 0.18f + 0.22f * pulse);
+            _hotspotRing.enabled = showHotspotCircle;
+            _hotspotFill.enabled = showHotspotCircle;
             _hotspotLabel.text = _armed ? "Turn the ring 90°" : _dwell > 0f ? "Hold the ring still..." : "";
         }
 
@@ -205,7 +216,7 @@ namespace EscapeRoom
 
         void OnRotated(int id, float delta)
         {
-            if (!IsRing(id) || _animating) return;
+            if (!IsRing(id)) return;
             if (Zoomed)
             {
                 // Only turning back (opposite to the way in) counts; over-turning further does not need undoing.
@@ -224,10 +235,15 @@ namespace EscapeRoom
 
         void OnRemoved(int id)
         {
-            if (IsRing(id) && !Zoomed) Disarm();
+            if (!IsRing(id)) return;
+            if (!Zoomed) Disarm();       // half-way in -> zoom falls back
+            else _exitAccum = 0f;        // half-way out -> switchbox stays open
         }
 
         // ------------------------------------------------------------------ zoom
+
+        /// <summary>0 = room view, 1 = switchbox fully zoomed in. Follows the ring while it turns.</summary>
+        public float ZoomAmount => _zoom;
 
         public void ZoomIn()
         {
@@ -235,40 +251,37 @@ namespace EscapeRoom
             Zoomed = true;
             _exitAccum = 0f;
             Disarm();
-            if (room != null) room.inputLocked = true;
-            StartCoroutine(AnimateZoom(true));
         }
 
         public void ZoomOut()
         {
             if (!Zoomed) return;
             Zoomed = false;
-            if (room != null) room.inputLocked = false;
-            StartCoroutine(AnimateZoom(false));
+            _exitAccum = 0f;
+            Disarm();
         }
 
-        IEnumerator AnimateZoom(bool open)
+        void UpdateZoomVisual()
         {
-            _animating = true;
-            _zoomRoot.gameObject.SetActive(true);
-            for (float t = 0f; t < 1f; t += Time.deltaTime / 0.35f)
-            {
-                float k = Mathf.SmoothStep(0f, 1f, open ? t : 1f - t);
-                _zoomGroup.alpha = k;
-                _panel.localScale = Vector3.one * Mathf.Lerp(0.35f, 1f, k);
-                yield return null;
-            }
-            _zoomGroup.alpha = open ? 1f : 0f;
-            _panel.localScale = Vector3.one;
-            _zoomRoot.gameObject.SetActive(open);
-            _animating = false;
+            float target = Zoomed
+                ? 1f - Mathf.Clamp01(_exitAccum / turnDegrees)
+                : _armed ? Mathf.Clamp01(Mathf.Abs(_enterAccum) / turnDegrees) : 0f;
+            _zoom = Mathf.Lerp(_zoom, target, 1f - Mathf.Exp(-zoomFollowSpeed * Time.deltaTime));
+            if (Mathf.Abs(_zoom - target) < 0.002f) _zoom = target;
+
+            bool show = _zoom > 0.001f;
+            if (_zoomRoot.gameObject.activeSelf != show) _zoomRoot.gameObject.SetActive(show);
+            if (!show) return;
+            float k = Mathf.SmoothStep(0f, 1f, _zoom);
+            _zoomGroup.alpha = k;
+            _panel.localScale = Vector3.one * Mathf.Lerp(0.35f, 1f, k);
         }
 
         // ------------------------------------------------------------------ knobs
 
         void OnTap(Vector2 screen)
         {
-            if (!Zoomed || _animating || Solved) return;
+            if (!Zoomed || _zoom < 0.95f || Solved) return;
             for (int i = 0; i < 8; i++)
             {
                 if (!RectTransformUtility.RectangleContainsScreenPoint(_slotHit[i], screen, null)) continue;

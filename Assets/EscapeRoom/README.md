@@ -19,9 +19,11 @@ a little. Clockwise turns right. `Follow Smoothing` sets how snappy it is; tick 
 view should glide onto the nearest wall when the token stops.
 
 ## Game flow
-1. **Intro** (`Intro Dialogue` object): story lines type themselves out. A tap/click anywhere finishes
-   the line, the next tap goes on. The power fails on line 2. After the last line the timer starts.
-   Edit the lines, typing speed and `Power Fails On Line` in the inspector.
+1. **Intro** (`Intro Dialogue` object): a short 5-line story ("you and your teammate") types itself out.
+   A tap/click anywhere finishes the line, the next tap goes on. The lights fail on line 3, the security
+   system announces the lockdown in red on line 4, and after the last line the timer starts.
+   Edit the `Story` list in the inspector: each line has a `Speaker`, `Text`, `Alert` (red, shaking box)
+   and `Cuts Power`.
 2. **Darkness** (`Game` object > `PowerController`): ceiling lamps off, red emergency lights on.
 3. **Puzzle 1 - Switchbox** (`Puzzle 1 - Switchbox` object, `SwitchPuzzle`)
    - Clue: the circuit poster on the lab's north wall (above the right table).

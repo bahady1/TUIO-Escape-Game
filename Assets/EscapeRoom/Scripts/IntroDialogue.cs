@@ -13,26 +13,58 @@ namespace EscapeRoom
     /// </summary>
     public class IntroDialogue : MonoBehaviour
     {
-        [TextArea(2, 4)]
-        public string[] lines =
+        [System.Serializable]
+        public struct DialogueLine
         {
-            "Two IT students arrive early at Lab 24 to prepare for an important exam. Student A enters the main computer lab, while Student B checks the smaller server room inside.",
-            "Without warning, a power failure triggers an automatic security lockdown, turning off the lights, locking the internal connecting door, and trapping the students on opposite sides with only 15 minutes before their exam.",
+            [Tooltip("Label above the text (place / time, or who is speaking). Empty = 'Default Speaker'.")]
+            public string speaker;
+            [TextArea(2, 4)] public string text;
+            [Tooltip("Shown as a red system alert (faster typing, the box shakes).")]
+            public bool alert;
+            [Tooltip("The power fails when this line appears.")]
+            public bool cutsPower;
+
+            public DialogueLine(string speaker, string text, bool alert = false, bool cutsPower = false)
+            {
+                this.speaker = speaker;
+                this.text = text;
+                this.alert = alert;
+                this.cutsPower = cutsPower;
+            }
+        }
+
+        public DialogueLine[] story =
+        {
+            new("LAB 24  ·  07:42",
+                "Exam day. You and your teammate slipped into Lab 24 early to squeeze in one last review. The building is empty. Only the servers are humming."),
+            new("LAB 24  ·  07:43",
+                "One of you settles in at the workbenches of the main lab. The other ducks into the server room next door to grab the backup drive with your whole project on it."),
+            new("LAB 24  ·  07:44",
+                "Then the lights flicker. Once. Twice. A sharp crack runs through the walls... and everything goes dark.",
+                cutsPower: true),
+            new("SECURITY SYSTEM",
+                "POWER FAILURE DETECTED.  LOCKDOWN PROTOCOL ACTIVE.  ALL INTERNAL DOORS SEALED.",
+                alert: true),
+            new("LAB 24  ·  07:45",
+                "A red emergency glow is all that's left. You can hear each other through the locked door, but you can't get through it. The exam starts in 15 minutes. Bring the power back. Find a way out. Together."),
         };
-        public string speaker = "LAB 24  -  07:42";
+        [Tooltip("Label used when a line has no speaker.")]
+        public string defaultSpeaker = "LAB 24";
         public float charactersPerSecond = 45f;
-        [Tooltip("Line (0-based) on which the power fails. -1 = never.")]
-        public int powerFailsOnLine = 1;
         public float startDelay = 0.6f;
 
         public Color accentColor = new(0.25f, 0.85f, 1f, 1f);
+        public Color alertColor = new(1f, 0.28f, 0.22f, 1f);
 
         public bool IsShowing { get; private set; }
 
         Font _font;
         GameObject _root;
         CanvasGroup _group;
-        Text _text, _continue, _counter;
+        Text _text, _continue, _counter, _speaker;
+        Image _accent;
+        RectTransform _box;
+        Vector2 _boxHome;
         int _line = -1;
         bool _typing;
         Coroutine _typer;
@@ -87,7 +119,7 @@ namespace EscapeRoom
             if (_typing)
             {
                 if (_typer != null) StopCoroutine(_typer);
-                _text.text = lines[_line];
+                _text.text = story[_line].text;
                 _typing = false;
                 return;
             }
@@ -97,25 +129,46 @@ namespace EscapeRoom
         void NextLine()
         {
             _line++;
-            if (_line >= lines.Length)
+            if (_line >= story.Length)
             {
                 StartCoroutine(Finish());
                 return;
             }
+            var line = story[_line];
             _shownAt = Time.unscaledTime;
-            _counter.text = $"{_line + 1} / {lines.Length}";
-            if (_line == powerFailsOnLine && PowerController.Instance != null) PowerController.Instance.CutPower();
-            _typer = StartCoroutine(Type(lines[_line]));
+            _counter.text = $"{_line + 1} / {story.Length}";
+            _speaker.text = string.IsNullOrEmpty(line.speaker) ? defaultSpeaker : line.speaker;
+
+            var color = line.alert ? alertColor : accentColor;
+            _speaker.color = color;
+            _accent.color = color;
+            _text.color = line.alert ? Color.Lerp(alertColor, Color.white, 0.35f) : Color.white;
+            _text.fontStyle = line.alert ? FontStyle.Bold : FontStyle.Normal;
+
+            if (line.cutsPower && PowerController.Instance != null) PowerController.Instance.CutPower();
+            if (line.alert) StartCoroutine(Shake(0.45f, 14f));
+            _typer = StartCoroutine(Type(line.text, line.alert ? 1.6f : 1f));
         }
 
-        IEnumerator Type(string line)
+        IEnumerator Shake(float seconds, float strength)
+        {
+            for (float t = 0f; t < seconds; t += Time.deltaTime)
+            {
+                float k = 1f - t / seconds;
+                _box.anchoredPosition = _boxHome + Random.insideUnitCircle * strength * k;
+                yield return null;
+            }
+            _box.anchoredPosition = _boxHome;
+        }
+
+        IEnumerator Type(string line, float speed)
         {
             _typing = true;
             _text.text = "";
             float shown = 0f;
             while (shown < line.Length)
             {
-                shown += Time.deltaTime * charactersPerSecond;
+                shown += Time.deltaTime * charactersPerSecond * speed;
                 _text.text = line.Substring(0, Mathf.Min(line.Length, Mathf.FloorToInt(shown)));
                 yield return null;
             }
@@ -132,7 +185,10 @@ namespace EscapeRoom
                 yield return null;
             }
             _root.SetActive(false);
-            if (PowerController.Instance != null && PowerController.Instance.PowerOn && powerFailsOnLine >= 0)
+            // Safety net: if a line cut the power but it was skipped very fast, make sure it is off.
+            bool anyCut = false;
+            foreach (var l in story) anyCut |= l.cutsPower;
+            if (anyCut && PowerController.Instance != null && PowerController.Instance.PowerOn)
                 PowerController.Instance.CutPower(false);
             if (GameHUD.Instance != null) GameHUD.Instance.BeginGame();
         }
@@ -163,13 +219,15 @@ namespace EscapeRoom
             box.sizeDelta = new Vector2(1800f, 380f);
             box.anchoredPosition = new Vector2(0f, -120f);
             Img(box, new Color(0.04f, 0.05f, 0.07f, 0.94f));
+            _box = box;
+            _boxHome = box.anchoredPosition;
 
             var border = Rect("Accent", box);
             border.anchorMin = new Vector2(0f, 1f);
             border.anchorMax = new Vector2(1f, 1f);
             border.pivot = new Vector2(0.5f, 1f);
             border.sizeDelta = new Vector2(0f, 5f);
-            Img(border, accentColor);
+            _accent = Img(border, accentColor);
 
             var name = Rect("Speaker", box);
             name.anchorMin = new Vector2(0f, 1f);
@@ -177,9 +235,9 @@ namespace EscapeRoom
             name.pivot = new Vector2(0f, 1f);
             name.offsetMin = new Vector2(50f, -80f);
             name.offsetMax = new Vector2(-50f, -20f);
-            var speakerText = Txt(name, 32, TextAnchor.MiddleLeft, accentColor);
-            speakerText.fontStyle = FontStyle.Bold;
-            speakerText.text = speaker;
+            _speaker = Txt(name, 32, TextAnchor.MiddleLeft, accentColor);
+            _speaker.fontStyle = FontStyle.Bold;
+            _speaker.text = defaultSpeaker;
 
             var counterRt = Rect("Counter", box);
             counterRt.anchorMin = new Vector2(0f, 1f);
@@ -221,11 +279,12 @@ namespace EscapeRoom
             rt.offsetMin = rt.offsetMax = Vector2.zero;
         }
 
-        static void Img(RectTransform rt, Color c)
+        static Image Img(RectTransform rt, Color c)
         {
             var i = rt.gameObject.AddComponent<Image>();
             i.color = c;
             i.raycastTarget = false;
+            return i;
         }
 
         Text Txt(RectTransform rt, int size, TextAnchor anchor, Color color)

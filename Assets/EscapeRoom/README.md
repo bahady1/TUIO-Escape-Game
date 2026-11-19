@@ -35,6 +35,19 @@ view should glide onto the nearest wall when the token stops.
    - Turn the ring back to leave; the switchbox shrinks as the ring turns and closes at about 90°.
      The ring can be lifted off while zoomed in (a half-finished turn back then springs open again).
    - `OnSolved` event on `SwitchPuzzle` for the next puzzle.
+4. **Puzzle 2 - Blackout Protocol** (in the rooms, after running
+   **Escape Room > Puzzles 2 + 3 > Place puzzles + clues in the rooms** once):
+   - Player A (left, lab): **Console A** on the lab side of the door (turn the lab view East).
+   - Player B (right, server room): **Console B** on the server side of the door (turn the view West).
+   - **Zoom in with the ring** like the switchbox: rest the ring on the console / poster for 1 s -> zoomed in
+     (no turning); tap CLOSE to leave. Inside, tap the screen to switch relays / type the solution.
+   - Clues: A = *Incident Log A-17* pinned on the lab whiteboard (South), B = *Maintenance Revision 04* on the
+     server-room North wall (left of the desk). Zoom into a poster with the ring to read it.
+   - Correct checksum, then A and B hold their AUTHORISE pads together for 2 s -> **the door between the rooms opens**.
+5. **Puzzle 3 - Ghost Administrator** on the same two consoles. Clues: A = *Network Telemetry* above the 3D printer
+   (lab North), B = *Security Directive* on the server-room North wall (right of the desk). Solve -> "YOU ESCAPED".
+   - `RoomPuzzleStations` (object *Puzzles 2 + 3 (in rooms)*): `Open Door After Puzzle 2` (untick = door opens at the end).
+   - Solutions and table setup: `BLACKOUT_GHOST_DEMO.md` in the project folder.
 
 ## Background music
 `Background Music` object (`BackgroundMusic` + `AudioSource`) loops `Audio/EscapeRoomLoop.wav`, an original
